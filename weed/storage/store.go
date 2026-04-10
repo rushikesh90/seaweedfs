@@ -796,6 +796,22 @@ func (s *Store) MaybeAdjustVolumeMax() (hasChanges bool) {
 			hasChanges = hasChanges || currentMaxVolumeCount != atomic.LoadInt32(&diskLocation.MaxVolumeCount)
 		} else {
 			newMaxVolumeCount = newMaxVolumeCount + diskLocation.OriginalMaxVolumeCount
+			diskStatus := stats.NewDiskStatus(diskLocation.Directory)
+			if diskStatus.All > 0 {
+				requiredSpace := uint64(diskLocation.OriginalMaxVolumeCount+1) * volumeSizeLimit
+				if requiredSpace > diskStatus.All {
+					diskGB := diskStatus.All / (1024 * 1024 * 1024)
+					volumeSizeLimitMB := volumeSizeLimit / (1024 * 1024)
+					recommendedSizeMB := uint64(1000)
+					recommendedMax := diskStatus.All / (recommendedSizeMB * 1024 * 1024)
+					if recommendedMax > 0 {
+						recommendedMax -= 1
+					}
+					recommendedMax = recommendedMax * 4 / 5
+					glog.Warningf("Current config risks compaction failure:\n\tdisk: %dGB\n\tvolumeSizeLimitMB: %d\n\tmax volumes: %d\n\trecommended:\n\tvolumeSizeLimitMB: %d\n\tmax volumes: %d",
+						diskGB, volumeSizeLimitMB, diskLocation.OriginalMaxVolumeCount, recommendedSizeMB, recommendedMax)
+				}
+			}
 		}
 	}
 	stats.VolumeServerMaxVolumeCounter.Set(float64(newMaxVolumeCount))
